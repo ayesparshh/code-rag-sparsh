@@ -1,0 +1,132 @@
+file_path,class_name,name,doc_comment,source_code,references
+./keployrag\embeddings.py,,generate_embeddings,,"def generate_embeddings(text):
+    """"""Generate embeddings using Azure OpenAI.""""""
+    try:
+        response = client.embeddings.create(
+            model=AZURE_EMBEDDING_DEPLOYMENT,
+            input=[text]
+        )
+        embeddings = response.data[0].embedding
+        return np.array(embeddings).astype('float32').reshape(1, -1)
+    except Exception as e:
+        print(f""Error generating embeddings with Azure OpenAI: {e}"")
+        return None",
+./keployrag\index.py,,clear_index,,"def clear_index():
+    """"""Delete the FAISS index and metadata files if they exist, and reinitialize the index.""""""
+    global index, metadata
+    
+    # Delete the FAISS index file
+    if os.path.exists(FAISS_INDEX_FILE):
+        os.remove(FAISS_INDEX_FILE)
+        print(f""Deleted FAISS index file: {FAISS_INDEX_FILE}"")
+
+    # Delete the metadata file
+    metadata_file = ""metadata.npy""
+    if os.path.exists(metadata_file):
+        os.remove(metadata_file)
+        print(f""Deleted metadata file: {metadata_file}"")
+
+    # Reinitialize the FAISS index and metadata
+    index = faiss.IndexFlatL2(EMBEDDING_DIM)
+    metadata = []
+    print(""FAISS index and metadata cleared and reinitialized."")",
+./keployrag\index.py,,add_to_index,"""""""Delete the FAISS index and metadata files if they exist, and reinitialize the index.""""""","def add_to_index(embeddings, full_content, filename, filepath):
+    global index, metadata
+
+    if embeddings.shape[1] != index.d:
+        raise ValueError(f""Embedding dimension {embeddings.shape[1]} does not match FAISS index dimension {index.d}"")
+
+    # Convert absolute filepath to relative path
+    relative_filepath = os.path.relpath(filepath, WATCHED_DIR)
+
+    index.add(embeddings)
+    metadata.append({
+        ""content"": full_content,
+        ""filename"": filename,
+        ""filepath"": relative_filepath
+    })",
+./keployrag\index.py,,save_index,,"def save_index():
+    faiss.write_index(index, FAISS_INDEX_FILE)
+    with open(""metadata.npy"", ""wb"") as f:
+        np.save(f, metadata)",
+./keployrag\index.py,,load_index,,"def load_index():
+    global index, metadata
+    index = faiss.read_index(FAISS_INDEX_FILE)
+    with open(""metadata.npy"", ""rb"") as f:
+        metadata = np.load(f, allow_pickle=True).tolist()
+    return index",
+./keployrag\index.py,,get_metadata,,"def get_metadata():
+    return metadata",
+./keployrag\index.py,,retrieve_vectors,,"def retrieve_vectors(n=5):
+    n = min(n, index.ntotal)
+    vectors = np.zeros((n, EMBEDDING_DIM), dtype=np.float32)
+    for i in range(n):
+        vectors[i] = index.reconstruct(i)
+    return vectors",
+./keployrag\index.py,,inspect_metadata,,"def inspect_metadata(n=5):
+    metadata = get_metadata()
+    print(f""Inspecting the first {n} metadata entries:"")
+    for i, data in enumerate(metadata[:n]):
+        print(f""Entry {i}:"")
+        print(f""Filename: {data['filename']}"")
+        print(f""Filepath: {data['filepath']}"")
+        print(f""Content: {data['content'][:100]}..."")  # Show the first 100 characters
+        print()",
+./keployrag\monitor.py,,should_ignore_path,,"def should_ignore_path(path):
+    """"""Check if the given path should be ignored based on the IGNORE_PATHS list.""""""
+    for ignore_path in IGNORE_PATHS:
+        if path.startswith(ignore_path):
+            return True
+    return False",
+./keployrag\monitor.py,CodeChangeHandler,on_modified,,"def on_modified(self, event):
+        if event.is_directory or should_ignore_path(event.src_path):
+            return
+
+        if event.src_path.endswith("".py""):
+            print(f""Detected change in file: {event.src_path}"")
+            with open(event.src_path, 'r', encoding='utf-8') as f:
+                full_content = f.read()
+            embeddings = generate_embeddings(full_content)
+            if embeddings is not None and len(embeddings) > 0:
+                filename = os.path.basename(event.src_path)
+                add_to_index(embeddings, full_content, filename, event.src_path)
+                save_index()
+                print(f""Updated FAISS index for file: {event.src_path}"")",
+./keployrag\monitor.py,,start_monitoring,,"def start_monitoring():
+    event_handler = CodeChangeHandler()
+    observer = Observer()
+    observer.schedule(event_handler, path=WATCHED_DIR, recursive=True)
+    observer.start()
+    print(f""Started monitoring {WATCHED_DIR}..."")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()",
+./keployrag\search.py,,search_code,,"def search_code(query, k=5):
+    """"""Search the FAISS index using a text query.""""""
+    index = load_index()  # Load the FAISS index
+    query_embedding = generate_embeddings(query)  # Generate embedding for the query
+
+    if query_embedding is None:
+        print(""Failed to generate query embedding."")
+        return []
+
+    # Perform the search in FAISS
+    distances, indices = index.search(query_embedding, k)
+
+    results = []
+    for i, idx in enumerate(indices[0]):  # Iterate over the search results
+        if idx < len(get_metadata()):  # Ensure the index is within bounds
+            file_data = get_metadata()[idx]
+            results.append({
+                ""filename"": file_data[""filename""],
+                ""filepath"": file_data[""filepath""],
+                ""content"": file_data[""content""],
+                ""distance"": distances[0][i]  # Access distance using the correct index
+            })
+        else:
+            print(f""Warning: Index {idx} is out of bounds for metadata with length {len(get_metadata())}"")
+    return results",

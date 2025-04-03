@@ -1,0 +1,29 @@
+file_path,class_name,constructor_declaration,method_declarations,source_code,references
+./keployrag\monitor.py,CodeChangeHandler,,"def on_modified(self, event):
+        if event.is_directory or should_ignore_path(event.src_path):
+            return
+
+        if event.src_path.endswith("".py""):
+            print(f""Detected change in file: {event.src_path}"")
+            with open(event.src_path, 'r', encoding='utf-8') as f:
+                full_content = f.read()
+            embeddings = generate_embeddings(full_content)
+            if embeddings is not None and len(embeddings) > 0:
+                filename = os.path.basename(event.src_path)
+                add_to_index(embeddings, full_content, filename, event.src_path)
+                save_index()
+                print(f""Updated FAISS index for file: {event.src_path}"")","class CodeChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.is_directory or should_ignore_path(event.src_path):
+            return
+
+        if event.src_path.endswith("".py""):
+            print(f""Detected change in file: {event.src_path}"")
+            with open(event.src_path, 'r', encoding='utf-8') as f:
+                full_content = f.read()
+            embeddings = generate_embeddings(full_content)
+            if embeddings is not None and len(embeddings) > 0:
+                filename = os.path.basename(event.src_path)
+                add_to_index(embeddings, full_content, filename, event.src_path)
+                save_index()
+                print(f""Updated FAISS index for file: {event.src_path}"")",
