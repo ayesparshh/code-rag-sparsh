@@ -39,3 +39,4 @@ langchain-community>=0.0.10
 streamlit>=1.30.0
 tree-sitter==0.21.3
 tree-sitter-languages
+watchdog

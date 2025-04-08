@@ -1,6 +1,6 @@
 import sys
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -12,10 +12,59 @@ from langchain.prompts import PromptTemplate
 import openai
 import uvicorn
 import logging
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import time
+from threading import Lock
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Global variables for state management
+index_lock = Lock()
+vectordb = None
+observer = None
+
+class DocChangeHandler(FileSystemEventHandler):
+    def __init__(self):
+        self.last_modified = {}
+        self.cooldown = 2  # seconds
+
+    def on_modified(self, event):
+        if not event.is_directory and event.src_path.endswith('.md'):
+            current_time = time.time()
+            last_modified = self.last_modified.get(event.src_path, 0)
+            
+            if current_time - last_modified > self.cooldown:
+                self.last_modified[event.src_path] = current_time
+                logger.info(f"Document modified: {event.src_path}")
+                update_index_for_file(event.src_path)
+
+    def on_created(self, event):
+        if not event.is_directory and event.src_path.endswith('.md'):
+            logger.info(f"New document created: {event.src_path}")
+            update_index_for_file(event.src_path)
+
+def update_index_for_file(filepath):
+    global vectordb
+    with index_lock:
+        try:
+            from brain import update_document_index, current_embeddings, current_index
+            if current_index and current_embeddings:
+                logger.info(f"Updating index for file: {filepath}")
+                vectordb = update_document_index(filepath, current_index, current_embeddings)
+                logger.info("Index updated successfully")
+        except Exception as e:
+            logger.error(f"Error updating index: {str(e)}")
+
+def setup_file_watcher(docs_path):
+    global observer
+    event_handler = DocChangeHandler()
+    observer = Observer()
+    observer.schedule(event_handler, docs_path, recursive=True)
+    observer.start()
+    logger.info(f"File watcher started for directory: {docs_path}")
 
 # Load environment variables from .env file
 logger.info("Loading environment variables...")
@@ -82,6 +131,9 @@ if mdx_file_paths:
         mdx_files = [open(f, "rb").read() for f in mdx_file_paths]
         mdx_file_names = [os.path.basename(f) for f in mdx_file_paths]
         vectordb = create_vectordb(mdx_files, mdx_file_names)
+        
+        # Set up file watcher after initial index creation
+        setup_file_watcher(docs_folder)
     except Exception as e:
         logger.error(f"Error processing MDX files: {str(e)}")
         sys.exit(1)
@@ -89,8 +141,6 @@ if mdx_file_paths:
     # Create a conversational chain
     logger.info("Creating conversational chain...")
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True, output_key="answer", max_messages=10)
-
-    
 
     template = """
         You are a helpful assistant specialized in answering technical questions related to Keploy. You are provided with context from a vector database and a chat history. Your task is to answer the user's question based on the provided context and the chat history. If you don't know the answer, just say 'I don't know'. Do not try to make up an answer. If the question is not related to Keploy, say 'I am not sure about that'."
@@ -107,7 +157,7 @@ if mdx_file_paths:
         )
     llm = AzureChatOpenAI(
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        azure_deployment="gpt-4o-global-standard",
+        azure_deployment="gpt-4o-global-standard", # gpt-4o
         openai_api_version=os.getenv("OPENAI_API_VERSION"),
         openai_api_type="azure",
         temperature=0.7,
@@ -158,6 +208,14 @@ def chat(question: Question):
     except Exception as e:
         logger.error(f"Error during chat processing: {str(e)}")
         raise HTTPException(status_code=500, detail="An error occurred during chat processing")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global observer
+    if observer:
+        observer.stop()
+        observer.join()
+        logger.info("File watcher stopped")
 
 # Main entry point to start the FastAPI server
 if __name__ == '__main__':
