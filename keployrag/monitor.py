@@ -2,7 +2,7 @@ import time
 import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from keployrag.index import add_to_index, save_index
+from keployrag.index import add_to_index, save_index, delete_entities
 from keployrag.embeddings import generate_embeddings
 from keployrag.config import WATCHED_DIR, IGNORE_PATHS
 
@@ -24,14 +24,22 @@ class CodeChangeHandler(FileSystemEventHandler):
 
         if event.src_path.endswith(".py"):
             print(f"Detected change in file: {event.src_path}")
-            with open(event.src_path, 'r', encoding='utf-8') as f:
-                full_content = f.read()
-            embeddings = generate_embeddings(full_content)
-            if embeddings is not None and len(embeddings) > 0:
-                filename = os.path.basename(event.src_path)
-                add_to_index(embeddings, full_content, filename, event.src_path)
-                save_index()
-                print(f"Updated FAISS index for file: {event.src_path}")
+            try:
+                relative_path = os.path.relpath(event.src_path, WATCHED_DIR)
+                delete_expr = f'filepath == "{relative_path}"'
+                delete_entities(filter_expr=delete_expr)
+                print(f"Deleted old entries for file: {event.src_path}")
+
+                with open(event.src_path, 'r', encoding='utf-8') as f:
+                    full_content = f.read()
+                embeddings = generate_embeddings(full_content)
+                if embeddings is not None and len(embeddings) > 0:
+                    filename = os.path.basename(event.src_path)
+                    add_to_index(embeddings, full_content, filename, event.src_path)
+                    save_index()
+                    print(f"Updated index with new content for file: {event.src_path}")
+            except Exception as e:
+                print(f"Error updating index for {event.src_path}: {str(e)}")
 
 def start_monitoring():
     event_handler = CodeChangeHandler()

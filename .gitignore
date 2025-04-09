@@ -20,3 +20,6 @@ metadata.npy
 
 *.log
 *.tmp
+.volumes
+volumes/
+.volumes/

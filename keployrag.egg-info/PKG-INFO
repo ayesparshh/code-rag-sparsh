@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: keployrag
+Version: 0.1.0
+Requires-Dist: openai
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: python-dotenv
+Requires-Dist: python-multipart
+Requires-Dist: langchain>=0.1.0
+Requires-Dist: langchain-openai>=0.0.3
+Requires-Dist: langchain-community>=0.0.10
+Requires-Dist: faiss-cpu
+Requires-Dist: streamlit>=1.30.0
+Requires-Dist: watchdog
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: pydantic
+Dynamic: requires-dist
