@@ -13,7 +13,7 @@ AZURE_CHAT_DEPLOYMENT = os.getenv("AZURE_CHAT_DEPLOYMENT", "gpt-4")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", 1536))
 
 # Project directory
-WATCHED_DIR = os.getenv("WATCHED_DIR", os.path.join(os.getcwd(), 'KeployRAG'))
+WATCHED_DIR = os.getenv("WATCHED_DIR", os.path.join(os.getcwd(), 'keployrag'))
 
 # FAISS index file path
 FAISS_INDEX_FILE = os.getenv("FAISS_INDEX_FILE", os.path.join(WATCHED_DIR, 'keployrag_index.faiss'))
