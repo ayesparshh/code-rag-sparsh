@@ -28,19 +28,18 @@ def clear_index():
 
 def add_to_index(embeddings, full_content, filename, filepath):
     global index, metadata
-
-    if embeddings.shape[1] != index.d:
-        raise ValueError(f"Embedding dimension {embeddings.shape[1]} does not match FAISS index dimension {index.d}")
-
-    # Convert absolute filepath to relative path
+    
     relative_filepath = os.path.relpath(filepath, WATCHED_DIR)
-
+    metadata = [m for m in metadata if m["filepath"] != relative_filepath]
+    if embeddings.shape[1] != index.d:
+        raise ValueError(f"Embedding dimension {embeddings.shape[1]} does not match index dimension {index.d}")
     index.add(embeddings)
     metadata.append({
         "content": full_content,
         "filename": filename,
         "filepath": relative_filepath
     })
+    save_index()
 
 def save_index():
     faiss.write_index(index, FAISS_INDEX_FILE)
