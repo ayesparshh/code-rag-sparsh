@@ -8,8 +8,12 @@ from keployrag.config import WATCHED_DIR, IGNORE_PATHS
 
 def should_ignore_path(path):
     """Check if the given path should be ignored based on the IGNORE_PATHS list."""
+    normalized_path = os.path.normpath(path)
     for ignore_path in IGNORE_PATHS:
-        if path.startswith(ignore_path):
+        normalized_ignore = os.path.normpath(ignore_path)
+        if normalized_ignore in normalized_path:
+            return True
+        if "__pycache__" in normalized_path:
             return True
     return False
 
@@ -34,7 +38,7 @@ def start_monitoring():
     observer = Observer()
     observer.schedule(event_handler, path=WATCHED_DIR, recursive=True)
     observer.start()
-    print(f"Started monitoring {WATCHED_DIR}...")
+    print(f"Started monitoring {WATCHED_DIR}... now run the streamlit server")
 
     try:
         while True:

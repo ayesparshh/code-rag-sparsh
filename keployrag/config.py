@@ -25,6 +25,7 @@ IGNORE_PATHS = [
     os.path.join(WATCHED_DIR, ".venv"),
     os.path.join(WATCHED_DIR, "node_modules"),
     os.path.join(WATCHED_DIR, "__pycache__"),
+    "**/__pycache__",
     os.path.join(WATCHED_DIR, ".git"),
     os.path.join(WATCHED_DIR, "tests"),
 ]
